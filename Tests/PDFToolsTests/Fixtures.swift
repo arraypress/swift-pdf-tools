@@ -123,4 +123,24 @@ enum Fixtures {
         let i = (row * width + x) * 4
         return (data[i], data[i + 1], data[i + 2])
     }
+
+    /// Twenty-odd pages of dense vector content — fat enough that a
+    /// kilobyte of mid-file damage lands inside one page's stream and
+    /// nowhere near the cross-reference table.
+    static func fatPDF(pages: Int, in dir: URL) throws -> URL {
+        let url = dir.appendingPathComponent("fat.pdf")
+        var box = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let context = CGContext(url as CFURL, mediaBox: &box, nil)!
+        for page in 1...pages {
+            context.beginPDFPage(nil)
+            for index in 0..<600 {
+                context.setFillColor(CGColor(red: Double(index % 13) / 13, green: Double(index % 7) / 7,
+                                             blue: Double(page) / Double(pages), alpha: 1))
+                context.fill(CGRect(x: Double(index % 24) * 25, y: Double(index / 24) * 30, width: 22, height: 26))
+            }
+            context.endPDFPage()
+        }
+        context.closePDF()
+        return url
+    }
 }

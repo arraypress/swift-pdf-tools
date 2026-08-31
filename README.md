@@ -32,6 +32,44 @@ print("signed page \(where.page) at \(where.rect)")   // points, top-left origin
 
 100 single-page documents merge in 0.22 s. Twenty letter pages render to 144-dpi PNGs in 0.88 s. A five-photo A4 PDF re-rendered at 120 dpi / q0.6 dropped 535 KB → 462 KB; a 13 KB text PDF would have *grown* to 51 KB, so the original was kept and the report said so. Fifteen tests pin all of it, pixel probes included.
 
+## The second wave
+
+- **HTML → PDF** — `renderHTML` (macOS): WebKit, properly paginated through
+  the print system (`createPDF` alone yields one endless page — offered as
+  the long-page option). The one corner of this library that can touch the
+  network, and genuinely `async`: pumping the main run loop from inside a
+  MainActor job can never drain the main queue again, so the render awaits
+  its callbacks instead — the first version hung on exactly that.
+- **Compare** — pages rendered at one density and diffed per pixel with a
+  small tolerance (antialiasing is not "change"), regions counted on a
+  coarse grid; pages only one document has count as added/removed.
+  `diffImage` tints the changes red over a desaturated render.
+- **Repair** — salvage, never a promise: every page that still parses is
+  copied into a fresh document and the LOST pages are named. Empirically:
+  damage that spares the cross-reference table costs the pages it hit;
+  damage that reaches the xref costs everything, and the error says so.
+- **Live annotations** — `markup` (highlight/underline/strikeout on every
+  match, per text line), `note`, `link`: real annotations a reader can
+  select and delete, unlike the overlay engine's burned-in ink. Freehand
+  ink is deliberately absent — a terminal has no hand to draw with.
+- **Metadata** — `metadata`/`setMetadata` over the document attributes.
+- **Outline** — `outline` reads; `addOutline` WRITES THROUGH CORE GRAPHICS,
+  because PDFKit's save drops a changed `outlineRoot` in every permutation
+  on current macOS (probed: assign before/after building, `write(to:)`,
+  `dataRepresentation()`, from URL and from data). The price is a
+  re-render, the same trade as the overlay verbs.
+- **Field authoring** — `addField` (text, checkbox, choice). The ORDER is
+  load-bearing: a field name set before the field type is discarded by the
+  save and the field reopens as "text0" — type first, name second.
+- **Permissions** — `protect` gained `allowsPrinting`/`allowsCopying`.
+  They bind USER-password openers only; with one password everyone opens
+  as owner and a restriction binds nobody — pass a distinct owner password.
+
+Measured, second wave: 220 paragraphs of HTML paginate to 8 A4 pages in
+about 1.2 s; a 24-page pair compares in 1.5 s at 144 dpi; salvage of a
+24-page file with eight damaged spots recovers 21 pages, names the three
+lost, and takes 0.08 s.
+
 ## Requirements
 
 macOS 14+ / iOS 17+, Swift 6. PDFKit, Core Graphics, Core Text, ImageIO — nothing third-party.
