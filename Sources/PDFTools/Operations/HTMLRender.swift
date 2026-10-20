@@ -28,6 +28,10 @@ public extension PDFTools {
     struct HTMLOptions: Sendable {
         /// Paper for pagination, or `nil` for one long page.
         public var paper: PageSize?
+        /// An exact page, in points, for anything that is not paper — a
+        /// 960 × 540 slide. Paginates, wins over `paper`, and lays out one
+        /// CSS pixel to the point, so a 960px-wide element fills the page.
+        public var pageSize: CGSize?
         /// Margin on all sides, in points (ignored for the long page).
         public var margin: Double
         /// Seconds to let scripts settle after the page finishes loading.
@@ -35,8 +39,10 @@ public extension PDFTools {
         /// Seconds before an unresponsive load is abandoned.
         public var timeout: TimeInterval
 
-        public init(paper: PageSize? = .a4, margin: Double = 36, settle: TimeInterval = 2, timeout: TimeInterval = 60) {
+        public init(paper: PageSize? = .a4, pageSize: CGSize? = nil, margin: Double = 36,
+                    settle: TimeInterval = 2, timeout: TimeInterval = 60) {
             self.paper = paper
+            self.pageSize = pageSize
             self.margin = margin
             self.settle = settle
             self.timeout = timeout
@@ -51,7 +57,7 @@ public extension PDFTools {
     static func renderHTML(_ source: URL, options: HTMLOptions = HTMLOptions()) async throws -> Data {
         // A window materialises AppKit enough for WebKit to lay out.
         _ = NSApplication.shared
-        let paperSize = options.paper?.points ?? CGSize(width: 794, height: 1123)
+        let paperSize = options.pageSize ?? options.paper?.points ?? CGSize(width: 794, height: 1123)
         let view = WKWebView(frame: CGRect(origin: .zero,
                                            size: CGSize(width: paperSize.width - 2 * options.margin, height: paperSize.height)))
         let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -77,8 +83,23 @@ public extension PDFTools {
         // Let scripts settle.
         try? await Task.sleep(nanoseconds: UInt64(max(0, options.settle) * 1_000_000_000))
 
-        guard let paper = options.paper else { return try await longPage(view) }
-        return try await printed(view, in: window, paper: paper.points ?? paperSize, margin: options.margin)
+        guard options.pageSize != nil || options.paper != nil else { return try await longPage(view) }
+        if options.pageSize != nil { try await unshrink(view) }
+        return try await printed(view, in: window, paper: paperSize, margin: options.margin)
+    }
+
+    /// WebKit's print path lays a page out 1.25× wider than the paper and
+    /// shrinks it to fit — its minimum shrink factor — so everything prints
+    /// at 80%. Fine for a document that reflows; on an exact page a 960px
+    /// slide filled 768 points of a 960-point page. Zooming by the same
+    /// factor undoes it, measured to the point.
+    @MainActor
+    private static func unshrink(_ view: WKWebView) async throws {
+        do {
+            _ = try await view.evaluateJavaScript("document.documentElement.style.zoom = '1.25'")
+        } catch {
+            throw PDFToolsError.writeFailed("The page would not take its zoom: \(error.localizedDescription)")
+        }
     }
 
     // MARK: The two output shapes

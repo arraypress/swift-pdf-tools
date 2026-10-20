@@ -143,4 +143,14 @@ enum Fixtures {
         context.closePDF()
         return url
     }
+
+    /// One pixel of a rendered page as 0–255 RGB, counted from the top left.
+    static func pixel(_ image: CGImage, x: Int, y: Int) -> [Int] {
+        var bytes = [UInt8](repeating: 0, count: 4)
+        let ctx = CGContext(data: &bytes, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        ctx.draw(image, in: CGRect(x: -x, y: y - image.height + 1, width: image.width, height: image.height))
+        return bytes.prefix(3).map(Int.init)
+    }
 }

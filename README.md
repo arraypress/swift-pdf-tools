@@ -40,6 +40,10 @@ print("signed page \(where.page) at \(where.rect)")   // points, top-left origin
   network, and genuinely `async`: pumping the main run loop from inside a
   MainActor job can never drain the main queue again, so the render awaits
   its callbacks instead — the first version hung on exactly that.
+  `pageSize` prints onto an exact page instead of paper — a 960 × 540 slide
+  — one CSS pixel to the point. WebKit's print path lays a page out 1.25×
+  wide and shrinks it to fit, so left alone a 960px slide filled 768 points
+  of a 960-point page; an exact page zooms by the same factor to undo it.
 - **Compare** — pages rendered at one density and diffed per pixel with a
   small tolerance (antialiasing is not "change"), regions counted on a
   coarse grid; pages only one document has count as added/removed.

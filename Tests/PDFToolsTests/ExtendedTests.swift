@@ -41,6 +41,33 @@ final class ExtendedTests: XCTestCase {
         XCTAssertTrue(try PDFTools.text(singleDoc).contains("HTMLPROBE paragraph 219"))
     }
 
+    @MainActor
+    func testHTMLPaginatesOntoAnExactPageSize() async throws {
+        let html = dir.appendingPathComponent("slides.html")
+        let slides = (1...3).map { "<div class=\"slide\">SLIDEPROBE \($0)</div>" }.joined()
+        try """
+        <html><head><style>
+        body { margin: 0 }
+        div.slide { width: 960px; height: 540px; overflow: hidden; break-after: page;
+                    background: #FF0000; -webkit-print-color-adjust: exact }
+        </style></head><body>\(slides)</body></html>
+        """.write(to: html, atomically: true, encoding: .utf8)
+
+        let data = try await PDFTools.renderHTML(html, options: .init(pageSize: CGSize(width: 960, height: 540),
+                                                                    margin: 0, settle: 0.3))
+        let doc = try XCTUnwrap(PDFDocument(data: data))
+        XCTAssertEqual(doc.pageCount, 3, "one page per slide")
+        let box = try XCTUnwrap(doc.page(at: 0)).bounds(for: .mediaBox)
+        XCTAssertEqual(box.width, 960, accuracy: 1)
+        XCTAssertEqual(box.height, 540, accuracy: 1)
+        XCTAssertTrue(try PDFTools.text(doc).contains("SLIDEPROBE 3"))
+
+        // One CSS pixel to the point: the red reaches the far corner. Left to
+        // WebKit's print shrink it stopped at 80% and this pixel was white.
+        let page = try PDFTools.render(doc, page: 1, dpi: 72)
+        XCTAssertEqual(Fixtures.pixel(page, x: 955, y: 535), [255, 0, 0])
+    }
+
     // MARK: Compare
 
     func testCompareSeesNoDifferenceInIdenticalDocuments() throws {
