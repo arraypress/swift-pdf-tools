@@ -16,7 +16,8 @@ print("signed page \(where.page) at \(where.rect)")   // points, top-left origin
 ## What it does
 
 - 📄 **Pages** — `merge`, `split(every:)`, `split(before:)`, `extract`, `delete`, `reorder` (a full permutation, because a partial one silently dropping pages is a data-loss trap), `rotate` (quarter turns), `crop` (a top-left box, converted to PDF space correctly)
-- ✍️ **Ink** — `watermark` (text and/or image, tiled or anchored), `number` (`"Page %d of %d"`), and `sign`: a PNG placed at a point, **above a label found by text search**, or into a named form field — pinned inside the page, never drawn off it
+- ✍️ **Ink** — `watermark` (text and/or image, tiled or anchored), `number` (`"Page %d of %d"`), and `sign`: a PNG placed at a point, **above a label found by text search**, or into a named form field — pinned inside the page, never drawn off it, with room kept under it for `dated:`'s date
+- ✂️ **Never cut** — watermark and page-number text shrinks to fit the page (at its angle), then wraps onto more lines; text that cannot fit even at the smallest size (8 pt watermark, 6 pt number) is drawn whole and `onWarning` says so, naming the pages. Left and right page numbers are set flush to their inset — centring them on a point 28 pt in put the "P" of "Page 100 of 120" off the page
 - 🔍 **Content** — `text`, and `find`, which answers *where* text sits: page + rectangle in points with a top-left origin. That rectangle is what turns "above the signature line" into coordinates
 - 📝 **Forms** — `fields` and `fill`; widget values persist through save
 - 🔐 **Security** — `protect` (user + owner password) and `unlocked`: writing an unlocked `PDFDocument` back to disk *keeps* its encryption, so the password-free copy comes from moving the pages into a fresh document
@@ -26,7 +27,7 @@ print("signed page \(where.page) at \(where.rect)")   // points, top-left origin
 
 - A signature placed here is a **stamped image**, flattened into the page — not a cryptographic signature.
 - `compress` rasterises: scans and image decks shrink, text stops being selectable, and a vector-text PDF (already small) comes back with `keptCompressed == false` and its original bytes.
-- Overlays re-render the document; extraction still works on the output (tested), but the file is a new drawing of the old pages.
+- Overlays re-render the document; extraction still works on the output (tested), but the file is a new drawing of the old pages. The pages' own annotations are carried across **live** — notes keep their words, links stay links, form fields stay fillable — rather than flattened into pictures of themselves, which is what used to happen.
 
 ## Measured
 
@@ -54,7 +55,7 @@ print("signed page \(where.page) at \(where.rect)")   // points, top-left origin
   damage that reaches the xref costs everything, and the error says so.
 - **Live annotations** — `markup` (highlight/underline/strikeout on every
   match, per text line), `note`, `link`: real annotations a reader can
-  select and delete, unlike the overlay engine's burned-in ink. Freehand
+  select and delete, unlike the overlay engine's ink. Freehand
   ink is deliberately absent — a terminal has no hand to draw with.
 - **Metadata** — `metadata`/`setMetadata` over the document attributes.
 - **Outline** — `outline` reads; `addOutline` WRITES THROUGH CORE GRAPHICS,

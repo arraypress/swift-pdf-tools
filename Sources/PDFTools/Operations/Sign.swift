@@ -98,31 +98,42 @@ public extension PDFTools {
 
         // Ink off the page helps nobody: keep the stamp inside the box,
         // shifted rather than shrunk (a label near an edge still gets
-        // signed, just as close to it as fits).
+        // signed, just as close to it as fits). A dated stamp keeps room
+        // under it for the date — pinned to the foot of the page, the date
+        // used to be drawn below it, off the page, and simply was not there.
         let media = try pageBox(document, target)
+        let foot: CGFloat = dated ? Self.dateDrop + 3 : 0
+        let usable = CGRect(x: media.minX, y: media.minY + foot,
+                            width: media.width, height: max(media.height - foot, 1))
         var pinned = rect
-        if pinned.width > media.width { 
-            let scale = media.width / pinned.width
-            pinned = CGRect(x: pinned.minX, y: pinned.minY, width: media.width, height: pinned.height * scale)
+        if pinned.width > usable.width {
+            let scale = usable.width / pinned.width
+            pinned = CGRect(x: pinned.minX, y: pinned.minY, width: usable.width, height: pinned.height * scale)
         }
-        if pinned.height > media.height {
-            let scale = media.height / pinned.height
-            pinned = CGRect(x: pinned.minX, y: pinned.minY, width: pinned.width * scale, height: media.height)
+        if pinned.height > usable.height {
+            let scale = usable.height / pinned.height
+            pinned = CGRect(x: pinned.minX, y: pinned.minY, width: pinned.width * scale, height: usable.height)
         }
-        if pinned.minX < media.minX { pinned.origin.x = media.minX }
-        if pinned.maxX > media.maxX { pinned.origin.x = media.maxX - pinned.width }
-        if pinned.minY < media.minY { pinned.origin.y = media.minY }
-        if pinned.maxY > media.maxY { pinned.origin.y = media.maxY - pinned.height }
+        if pinned.minX < usable.minX { pinned.origin.x = usable.minX }
+        if pinned.maxX > usable.maxX { pinned.origin.x = usable.maxX - pinned.width }
+        if pinned.minY < usable.minY { pinned.origin.y = usable.minY }
+        if pinned.maxY > usable.maxY { pinned.origin.y = usable.maxY - pinned.height }
         let placedRect = pinned
         let out = try overlay(document) { index, ctx, _ in
             guard index == target else { return }
-            ctx.draw(signature, in: placedRect)
+            // The re-rendered page starts at zero; a media box that does not
+            // has its content moved there, and the stamp moves with it.
+            ctx.draw(signature, in: placedRect.offsetBy(dx: -media.minX, dy: -media.minY))
             if dated {
                 let formatter = DateFormatter()
                 formatter.dateFormat = "yyyy-MM-dd"
                 let font = CTFontCreateWithName("Helvetica" as CFString, 9, nil)
                 let line = Self.line(formatter.string(from: Date()), font: font, color: CGColor(gray: 0.3, alpha: 1))
-                ctx.textPosition = CGPoint(x: placedRect.minX, y: placedRect.minY - 11)
+                // Under the stamp's left edge, or as far left as keeps it
+                // on the page when a narrow stamp sits against the right.
+                let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+                let x = max(media.minX, min(placedRect.minX, media.maxX - width))
+                ctx.textPosition = CGPoint(x: x - media.minX, y: placedRect.minY - media.minY - Self.dateDrop)
                 CTLineDraw(line, ctx)
             }
         }
@@ -130,6 +141,9 @@ public extension PDFTools {
                              width: placedRect.width, height: placedRect.height)
         return (out, SignReport(page: target + 1, rect: topLeft))
     }
+
+    /// How far below the stamp the date's baseline sits.
+    static let dateDrop: CGFloat = 11
 
     /// Loads a signature image from disk.
     static func image(at url: URL) throws -> CGImage {
